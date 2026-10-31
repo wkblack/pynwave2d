@@ -10,10 +10,10 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'bssn'), str(ROOT)]
-from bssneqs import BSSN
+from bssneqs import BSSN, BSSNOuterBCType
 import gauges
 import sommerfeld_tail as tail
-from nwave import Grid1D, ExplicitFirst642_1D, ExplicitSecond642_1D, FilterApply
+from nwave import Grid1D, ExplicitFirst642_1D, ExplicitSecond642_1D, FilterApply, RK4
 
 
 class TailTests(unittest.TestCase):
@@ -72,6 +72,30 @@ class TailTests(unittest.TestCase):
         for a, b in zip(actual, expected):
             np.testing.assert_array_equal(a, b)
         self.assertFalse(self.initialized(g, False).sommerfeld_tail)
+
+    def test_sponge_does_not_initialize_or_apply_tail(self):
+        """An unused default tail must not reject a valid zero-ghost sponge."""
+        for ng in (0, 3):
+            g = Grid1D({'Nx': 81, 'Xmin': -20., 'Xmax': 20., 'NGhost': ng},
+                       cell_centered=True)
+            g.set_D1(ExplicitFirst642_1D(g.dx[0]))
+            g.set_D2(ExplicitSecond642_1D(g.dx[0]))
+            states, initial_rhs = [], []
+            for option in ({}, {'sommerfeld_tail': True}, {'sommerfeld_tail': False}):
+                eq = BSSN(g, 1., 2., True, outer_bc=BSSNOuterBCType.SPONGE, **option)
+                self.assertIsNone(eq._tail_geometry)
+                eq.initialize(g, {'initial_data': 'Puncture', 'collapsed_lapse': True})
+                rhs = [np.zeros_like(x) for x in eq.u]
+                eq.rhs(rhs, eq.u, g)
+                initial_rhs.append(np.asarray(rhs))
+                rk = RK4(eq, g)
+                for _ in range(10):
+                    rk.step(eq, g, .01 * g.dx[0])
+                self.assertTrue(np.isfinite(eq.u).all())
+                states.append(np.asarray(eq.u))
+            for candidate in (1, 2):
+                np.testing.assert_array_equal(initial_rhs[0], initial_rhs[candidate])
+                np.testing.assert_array_equal(states[0], states[candidate])
 
     def test_invalid_setting(self):
         """Only booleans are accepted."""

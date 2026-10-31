@@ -102,7 +102,7 @@ class BSSN(Equations):
         self.sommerfeld_tail = sommerfeld_tail
         self._tail_geometry = (
             tail_bc.geometry(g.xi[0], g.nghost, extended_domain)
-            if sommerfeld_tail else None
+            if sommerfeld_tail and outer_bc == BSSNOuterBCType.SOMMERFELD else None
         )
 
         lapse_gauge = gauges.OnePlusLog() if lapse_gauge is None else lapse_gauge
