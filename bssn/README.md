@@ -123,8 +123,8 @@ Shift damping (`[shift_damping]`), the η in ∂_t B = … − η B:
 
 | `type` | η | Keys (default) |
 |--------|---|----------------|
-| `"constant"` | η | `eta` (2.0, must be ≥ 1) |
-| `"Schnetter"` | η / (1 + (r/R)²) | `eta` (2.0), `R` (50.0) |
+| `"constant"` | η | `eta` (2.0, must be ≥ 0) |
+| `"Schnetter"` | η / (1 + (r/R)²) | `eta` (2.0, must be ≥ 0), `R` (50.0) |
 | `"eta_MB"` | R₀ \|∂_r W\| / (√g̃_rr (1 − W)²), W = √χ (Müller & Brügmann 2010) | `R0` (1.31241) |
 | `"peaked_lorentz"` | bg + peak / (1 + (r/R)²) | `bg` (2.0), `peak` (2.0), `R` (1.31241) |
 

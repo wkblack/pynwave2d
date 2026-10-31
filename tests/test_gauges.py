@@ -116,7 +116,9 @@ class RegistryTests(unittest.TestCase):
             'unknown lapse type': {'lapse': {'type': '1+lg'}},
             'unknown key': {'lapse': {'type': '1+log', 'kk': 2.0}},
             'missing type': {'shift_damping': {'eta': 2.0}},
-            'eta < 1': {'shift_damping': {'type': 'constant', 'eta': 0.5}},
+            'eta < 0': {'shift_damping': {'type': 'constant', 'eta': -0.5}},
+            'Schnetter eta < 0': {'shift_damping': {'type': 'Schnetter',
+                                                   'eta': -0.5}},
             'kappa <= 0': {'lapse': {'type': 'ShockFull', 'kappa': 0.0}},
             'k <= 0': {'lapse': {'type': '1+log', 'k': -1.0}},
         }
@@ -131,7 +133,15 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(lapse.alpha2_f(ALPHA).tobytes(), (2 * ALPHA).tobytes())
         self.assertEqual(shift(None, None, None, None, 1.0), 3.0)
         with self.assertRaises(ValueError):
-            gauges.build_gauges({'eta': 0.5})
+            gauges.build_gauges({'eta': -0.5})
+
+    def test_eta_below_one_is_allowed(self):
+        for eta in (0.0, 0.5):
+            for kind in ('constant', 'Schnetter'):
+                with self.subTest(kind=kind, eta=eta):
+                    _, shift = gauges.build_gauges(
+                        {'shift_damping': {'type': kind, 'eta': eta}})
+                    self.assertEqual(shift(0.0, None, None, None, 1.0), eta)
 
     def test_unknown_type_lists_options(self):
         with self.assertRaisesRegex(ValueError, 'ShockFull'):

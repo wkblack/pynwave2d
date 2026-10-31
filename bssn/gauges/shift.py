@@ -24,8 +24,8 @@ class ConstantEta(ShiftDamping):
     """eta everywhere."""
 
     def __init__(self, eta=2.0):
-        if eta < 1.0:
-            raise ValueError("eta must be greater than or equal to 1.0")
+        if eta < 0.0:
+            raise ValueError("eta must be non-negative")
         self.eta = eta
 
     def __call__(self, r, chi, g_rr, d_chi, M):
@@ -37,8 +37,8 @@ class Schnetter(ShiftDamping):
     """eta = eta / (1 + (r/R)^2): radial falloff over the scale R."""
 
     def __init__(self, eta=2.0, R=50.0):
-        if eta < 1.0:
-            raise ValueError("eta must be greater than or equal to 1.0")
+        if eta < 0.0:
+            raise ValueError("eta must be non-negative")
         self.eta = eta
         self.R = R
 
