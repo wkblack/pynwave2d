@@ -60,7 +60,18 @@ Parameter files are [TOML](https://toml.io), passed as the sole argument to
 | `DerivSolveMethod` | `"LUSOLVE"` | Linear solver for compact stencils: `LUSOLVE`, `SCIPY`, `PENTAPY`, `D_LU`, `D_INV` |
 
 Stencil names: explicit `E4`, `E42`, `E44`, `E6`/`E642`, `E666`; compact `JT4`, `JT6`,
-`JP6`, `KP4` (D1 only), `DSQ6A`, `DSQ6B`; mixed `ME4`/`ME44`, `ME6`/`ME642`.
+`JP6`, `JP6_JT4`, `KP4` (D1 only), `DSQ6A`, `DSQ6B`; mixed `ME4`/`ME44`, `ME6`/`ME642`.
+
+`JP6_JT4` is a separately named hybrid: sixth-order JP6 interiors with joint
+fourth-order JT4 equations in the first two boundary rows. Select it explicitly
+for either derivative, e.g. `D1 = "JP6_JT4"`, `D2 = "JP6_JT4"`; BH-mask pairs
+use the same name. Boundary-dominated/global accuracy may be fourth order.
+Existing `JP6` behavior and all default selections remain unchanged, including
+its known inconsistent second boundary row. The hybrid is not a canonical
+published JP6 closure or a universally energy-stable method; matched
+Dirichlet-wave and radiative tests pass, but strong endpoint-inflow tests retain
+JT4-like finite growth/non-normal amplification. See
+[`tests/JP6_JT4_VALIDATION.md`](../tests/JP6_JT4_VALIDATION.md).
 
 ### BH stencil mask *(optional)*
 
@@ -192,3 +203,12 @@ constructor arguments are its parameter-file keys.  Nothing else needs editing.
 + Sommerfeld outer boundary conditions
 + Add KO dissipation
 + Add option to mask constraints near punctures
+
+### Optional JP6 alternatives
+
+`D1 = "JP6_REPAIRED"` and `D2 = "JP6_REPAIRED"` select the independently
+derived sixth-order-boundary pair. Set `BHMask = false`; at least 56 allocated
+points are required. `LUSOLVE` is optimized and `SCIPY` is a reference backend.
+The separately selectable `JP6_JT4` pair instead has fourth-order boundaries
+and sixth-order interiors. Both are opt-in; original `JP6` and all defaults
+are unchanged. See [support, tests and tradeoffs](../docs/jp6_repaired.md).

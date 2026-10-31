@@ -80,6 +80,10 @@ class DerivType(Enum):
     D2_2C6_1 = 37
     D2_2C4_1 = 38
     D2_2A_1 = 39
+    D1_JP6_REPAIRED = 42
+    D2_JP6_REPAIRED = 43
+    D1_JP6_JT4 = 40
+    D2_JP6_JT4 = 41
 
 
 class CFDSolve(Enum):
@@ -121,6 +125,8 @@ d1_type_map = {
     "JT4": DerivType.D1_JT4,
     "JT6": DerivType.D1_JT6,
     "JP6": DerivType.D1_JP6,
+    "JP6_REPAIRED": DerivType.D1_JP6_REPAIRED,
+    "JP6_JT4": DerivType.D1_JP6_JT4,
     "KP4": DerivType.D1_KP4,
     "DSQ6A": DerivType.D1_DSQ6A,
     "DSQ6B": DerivType.D1_DSQ6B,
@@ -146,6 +152,8 @@ d2_type_map = {
     "JT4": DerivType.D2_JT4,
     "JT6": DerivType.D2_JT6,
     "JP6": DerivType.D2_JP6,
+    "JP6_REPAIRED": DerivType.D2_JP6_REPAIRED,
+    "JP6_JT4": DerivType.D2_JP6_JT4,
     "DSQ6A": DerivType.D2_DSQ6A,
     "DSQ6B": DerivType.D2_DSQ6B,
     "DSQ6B": DerivType.D2_DSQ6B,
