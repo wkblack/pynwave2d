@@ -91,6 +91,15 @@ filter_boundary = false
 | `Mass` | — | ADM mass M |
 | `initial_data` | — | `"Puncture"` or `"EddingtonFinkelstein"` |
 | `collapsed_lapse` | — | Start with the pre-collapsed lapse (recommended for `Puncture`) |
+| `ef_stuff_radius` | 1.8 | `EddingtonFinkelstein` only: radius (in M, inside the horizon at 2M) within which the data are blended into the puncture |
+
+`EddingtonFinkelstein` data (Lagrangian system only) contain the physical
+singularity at r = 0, so inside the horizon they are "stuffed" with puncture
+data (turducken; Brown et al. 2009, arXiv:0707.3101): Kerr-Schild for
+r > R, the collapsed puncture for r < R/2, and a smooth blend between.  The
+constraint violation of the blend stays inside the horizon.  R = 1.7-1.9
+all run to 40 M with the horizon mass within 1e-3 of M; R = 1.5 and below
+fail within about 12 M.
 
 ### Gauge choices
 

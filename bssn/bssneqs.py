@@ -202,7 +202,7 @@ class BSSN(Equations):
                 raise ValueError(
                     "Eddington-Finkelstein initial data is not valid for Eulerian system."
                 )
-            self.initial_data_ef(g)
+            self.initial_data_ef(g, params.get("ef_stuff_radius", 1.8))
         else:
             raise ValueError(
                 "Invalid initial data. Must be 'puncture' or 'EddingtonFinkelstein'."
@@ -228,39 +228,77 @@ class BSSN(Equations):
         self.u[self.U_SHIFT][:] = 0.0
         self.u[self.U_GB][:] = 0.0
 
-    def initial_data_ef(self, g: Grid):
+    def initial_data_ef(self, g: Grid, stuff_radius=1.8):
         """
-        Initial data for the BSSN equations.  This is a simple
-        Schwarzschild solution in Eddington-Finkelstein coordinates.
-        This can be used to verify the BSSN equations for LAGRANGIAN
-        systems.
+        Schwarzschild in Eddington-Finkelstein (Kerr-Schild) coordinates,
+        for the Lagrangian system.
+
+        Unlike puncture data, this slice contains the physical singularity
+        at r = 0 (K ~ r^-3/2), which no grid resolves.  Following the
+        turducken approach (Brown et al. 2009, arXiv:0707.3101), the data
+        are blended smoothly into the same-mass isotropic puncture with a
+        collapsed lapse over stuff_radius/2 < r < stuff_radius (in units of
+        M, inside the horizon at r = 2M).  Gt is computed from the blended
+        conformal metric, so only the Hamiltonian and momentum constraints
+        are violated, and only inside the horizon.  Gt and beta are odd in
+        x, as for an extended domain.
         """
-        r = np.abs(g.xi[0])
-        H = np.zeros_like(r)
+        if not 0.0 < stuff_radius < 2.0:
+            raise ValueError("ef_stuff_radius must lie inside the horizon, 0 < R < 2")
+        x = g.xi[0]
+        r = np.abs(x)
         m = self.M
 
-        H[:] = 2.0 * m / r
-        self.u[self.U_ALPHA][:] = 1.0 / np.sqrt(1.0 + H)
-        self.u[self.U_CHI][:] = 1.0 / (1.0 + H) ** (1.0 / 3.0)
-        self.u[self.U_GRR][:] = (1.0 + H) ** (2.0 / 3.0)
-        self.u[self.U_GTT][:] = r**2 / (1.0 + H) ** (1.0 / 3.0)
-        self.u[self.U_ARR][:] = (
-            -4.0
-            * m
-            * (1.0 + H) ** (1.0 / 6.0)
-            * (3.0 * m + 2.0 * r)
-            / (3.0 * r * r * (r + 2.0 * m))
+        def ks(r):
+            H = 2.0 * m / r
+            return dict(
+                chi=(1.0 + H) ** (-1.0 / 3.0),
+                grr=(1.0 + H) ** (2.0 / 3.0),
+                q=(1.0 + H) ** (-1.0 / 3.0),  # gtt / r^2
+                Arr=-4.0 * m * (1.0 + H) ** (1.0 / 6.0) * (3.0 * m + 2.0 * r)
+                / (3.0 * r * r * (r + 2.0 * m)),
+                K=2.0 * m * (r + 3.0 * m) / (r * r * (2.0 * m + r) * np.sqrt(1.0 + H)),
+                alpha=1.0 / np.sqrt(1.0 + H),
+                beta=H / (1.0 + H),
+            )
+
+        # C-infinity step w: 0 for r <= r0, 1 for r >= r1
+        r1 = stuff_radius * m
+        r0 = 0.5 * r1
+        z = np.clip((r - r0) / (r1 - r0), 0.0, 1.0)
+
+        def bump(z):
+            zs = np.maximum(z, 1.0e-3)
+            return np.where(z > 1.0e-3, np.exp(-1.0 / zs), 0.0), 1.0 / zs**2
+
+        a, da = bump(z)
+        b, db = bump(1.0 - z)
+        w = a / (a + b)
+        dw = a * b * (da + db) / (a + b) ** 2 / (r1 - r0)
+
+        # Kerr-Schild outside, puncture inside (flat conformal metric)
+        rs = np.maximum(r, r0)
+        f = ks(rs)
+        chi_p = (1.0 + m / (2.0 * r)) ** -4
+        f0 = dict(chi=chi_p, grr=1.0, q=1.0, Arr=0.0, K=0.0,
+                  alpha=np.sqrt(chi_p), beta=0.0)
+        u = {k: w * f[k] + (1.0 - w) * f0[k] for k in f}
+
+        H, dH = 2.0 * m / rs, -2.0 * m / rs**2
+        dgrr = w * (2.0 / 3.0) * (1.0 + H) ** (-1.0 / 3.0) * dH + dw * (f["grr"] - 1.0)
+        dq = w * (-1.0 / 3.0) * (1.0 + H) ** (-4.0 / 3.0) * dH + dw * (f["q"] - 1.0)
+
+        self.u[self.U_CHI][:] = u["chi"]
+        self.u[self.U_GRR][:] = u["grr"]
+        self.u[self.U_GTT][:] = r**2 * u["q"]
+        self.u[self.U_ARR][:] = u["Arr"]
+        self.u[self.U_K][:] = u["K"]
+        self.u[self.U_ALPHA][:] = u["alpha"]
+        self.u[self.U_SHIFT][:] = np.sign(x) * u["beta"]
+        # Gt = grr'/(2 grr^2) - gtt'/(grr gtt) with gtt = r^2 q
+        self.u[self.U_GT][:] = np.sign(x) * (
+            dgrr / (2.0 * u["grr"] ** 2) - (2.0 / r + dq / u["q"]) / u["grr"]
         )
-        self.u[self.U_K][:] = (
-            2 * m * (r + 3.0 * m) / (r * r * (2.0 * m + r) * np.sqrt(1.0 + H))
-        )
-        self.u[self.U_GT][:] = (
-            -2.0
-            * (8 * m + 3 * r)
-            * (1.0 + H) ** (1.0 / 3.0)
-            / (3.0 * (2.0 * m + r) ** 2)
-        )
-        self.u[self.U_SHIFT][:] = H / (1 + H)
         self.u[self.U_GB][:] = 0.0
 
     def rhs(self, dtu, u, g: Grid):
