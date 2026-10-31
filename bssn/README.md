@@ -250,15 +250,34 @@ boundary points.  `gtt` is corrected in the radiated variable
 top level of the parameter file (before any table) to recover the plain
 Sommerfeld condition.
 
-Over the outermost 5 M of a puncture run this lowers the constraint norms by
-factors of 10^2-10^4 with E642 and 10^3-10^5 with JT4 and JT6.  JP6 is
-currently broken (not convergent), and with it the correction makes the
-outer norms worse.  It also reduces what the boundary reflects into the
-interior: on a +-20 M domain, compared with a +-100 M run, the error inside
+The gain depends on the constraint, grid, diagnostic region and evolution
+time; it is not one universal reduction factor. For puncture data at t = 2 M,
+R = 20 M, CFL = 0.1 and no KO dissipation, the outer physical-endpoint 5 M
+shell has these L2 ratios (tail / plain Sommerfeld):
+
+| Derivatives | Nx | Ham | Mom | Gamcon |
+|---|---:|---:|---:|---:|
+| E642 | 800 | 0.001089 | 0.005447 | 0.01727 |
+| E642 | 1600 | 0.0004115 | 0.002226 | 0.01011 |
+| JT4 / JT4 | 800 | 0.0002593 | 0.001080 | 0.003086 |
+| JT4 / JT4 | 1600 | 0.0001549 | 0.0007656 | 0.003056 |
+
+JP6 is currently broken (not convergent), and with it the correction makes
+the outer norms worse. In a separate collapsed-lapse gauge-pulse comparison,
+it also reduces what the boundary reflects into the interior: on a +-20 M
+domain, compared with a +-100 M run, the error inside
 |r| < 10 M is 10-250x smaller up to t = 25 M and still about 2x smaller at
 t = 40 M (JT4 and E642).  It does not make the boundary convergent: the
 error that remains comes from the R^-3 model, so it does not shrink with
 resolution, and once it reaches the interior it sets a floor on the
 constraints there.
+
+Longer E642 runs with KO6 sigma = 0.5 reach 50 M and have lower endpoint,
+time-integrated and peak-in-time constraint norms with the tail, but not lower
+norms at every time: outer momentum and Gamcon L2 can temporarily be about
+1.7-1.9x larger than plain Sommerfeld. Near-region fields are not bitwise
+identical at long times. These runs have early negative chi before later
+recovery; finite completion does not certify physical admissibility. The tail
+is not a constraint-preserving boundary or a universal stability guarantee.
 
 Background: [NewRad documentation](https://einsteintoolkit.org/thornguide/EinsteinEvolve/NewRad/documentation.html).
