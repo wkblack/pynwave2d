@@ -20,18 +20,28 @@ lapse: on the bare lapse the k = 0 mode collapses alpha to zero on a time
 1/mu (s = -1) or grows without bound (s = +1).
     "none"         0 (the bare lapse; for comparison only)
     "unity"        1
-    "chi"          sqrt(chi), the puncture's trumpet lapse profile (default)
+    "chi"          sqrt(chi), the puncture's trumpet lapse profile
     "chi_clamped"  sqrt(min(chi, 1)); chi overshoots 1 near the puncture
                    during evolution, after which sqrt(chi) would drive alpha up
-    "initial"      alpha at t = 0 (equal to sqrt(chi) for collapsed puncture data)
+    "initial"      alpha at t = 0 (equal to sqrt(chi) for collapsed puncture data;
+                   default)
 
 mu2_gate (g): a spatial weight on the mass term, 1 in the wave zone and small
 near the puncture, where the chi > 1 runaway lives.
-    "none"    1 (default)
+    "none"    1
     "alpha"   alpha, clipped to [0, 1]
-    "alpha2"  alpha^2, clipped
+    "alpha2"  alpha^2, clipped (default)
     "chi1"    a tanh step in chi, off above chi = 1 + 8 gate_width; centred at
               1 + 4 gate_width so the wave zone (chi -> 1) sees ~1, not 0.5
+
+The defaults are the only combination that stays healthy for a puncture.
+With s = -1 the mass term pushes A up wherever alpha < alpha_ref; at the
+puncture alpha -> 0, so it fights the lapse collapse, and with a co-evolving
+reference sqrt(chi) the growth of chi feeds the drive back (chi runs away and
+the run fails near 20-30 M).  The alpha^2 gate removes the term where alpha
+collapses, and the frozen reference cuts the feedback: either alone still
+runs away (the frozen reference fails near 50 M; the gate alone completes
+100 M with chi growth still accelerating).
 """
 
 import numpy as np
@@ -48,8 +58,8 @@ class Telegrapher(LapseGauge):
     n_aux = 1
     aux_names = ["lapseA"]
 
-    def __init__(self, c=1.5, mu=1.0, mu2_sign=-1.0, mu2_ref="chi",
-                 mu2_gate="none", gate_width=0.05):
+    def __init__(self, c=1.5, mu=1.0, mu2_sign=-1.0, mu2_ref="initial",
+                 mu2_gate="alpha2", gate_width=0.05):
         if c <= 0.0:
             raise ValueError("telegrapher: c must be positive")
         if mu <= 0.0:

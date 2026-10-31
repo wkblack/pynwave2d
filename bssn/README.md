@@ -142,8 +142,8 @@ a 10th field, `lapseA` = ∂_t α:
 | `c` | 1.5 | gauge speed; also the Sommerfeld speed of α and A |
 | `mu` | 1.0 | damping rate |
 | `mu2_sign` | −1.0 | s in [−1, 1]; −1 is distortionless (every k moves at c), 0 drops the mass term |
-| `mu2_ref` | `"chi"` | α_ref: `"none"`, `"unity"`, `"chi"` (√χ), `"chi_clamped"` (√min(χ,1)), `"initial"` (α at t = 0) |
-| `mu2_gate` | `"none"` | g: `"none"`, `"alpha"`, `"alpha2"`, `"chi1"` (off once χ > 1 + 8 `gate_width`) |
+| `mu2_ref` | `"initial"` | α_ref: `"none"`, `"unity"`, `"chi"` (√χ), `"chi_clamped"` (√min(χ,1)), `"initial"` (α at t = 0) |
+| `mu2_gate` | `"alpha2"` | g: `"none"`, `"alpha"`, `"alpha2"`, `"chi1"` (off once χ > 1 + 8 `gate_width`) |
 | `gate_width` | 0.05 | width of the `"chi1"` gate |
 
 A starts at the 1+log equilibrium −2αK (zero for puncture data).  See

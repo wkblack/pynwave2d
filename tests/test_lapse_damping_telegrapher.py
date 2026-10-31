@@ -122,6 +122,11 @@ class TelegrapherTests(unittest.TestCase):
         eq.apply_bcs(stage, g)
         np.testing.assert_array_equal(stage[9][:3], stage[9][5:2:-1])
 
+    def test_defaults_are_frozen_reference_and_alpha2_gate(self):
+        """Either alone runs away at the puncture; see gauges/telegrapher.py."""
+        t = gauges.build_gauges({'lapse': {'type': 'telegrapher'}})[0]
+        self.assertEqual((t.mu2_sign, t.mu2_ref, t.mu2_gate), (-1.0, 'initial', 'alpha2'))
+
     def test_initial_reference_needs_initial_aux(self):
         t = gauges.Telegrapher(mu2_ref='initial')
         with self.assertRaises(RuntimeError):
