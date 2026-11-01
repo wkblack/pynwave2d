@@ -26,13 +26,13 @@ from nwave.utils import (banded_to_full, construct_banded_matrix_numba,
 # fail upstream too (numba cannot reflect their nested-list boundary
 # coefficients) and cannot be selected from a parameter file.
 ALL_TYPES = [
-    'D1_JP6_JT4', 'D2_JP6_JT4', 'D1_JT4', 'D2_JT4', 'D1_JT6', 'D1_JP6', 'D2_JP6', 'D1_KP4', 'D1_Wm6', 'D1_DSQ6A', 'D2_DSQ6A', 'D1_DSQ6B', 'D2_DSQ6B',
+    'D1_JP6_JT4', 'D2_JP6_JT4', 'D1_JT4', 'D2_JT4', 'D1_JT6', 'D2_JT6', 'D1_JP6', 'D2_JP6', 'D1_KP4', 'D1_Wm6', 'D1_DSQ6A', 'D2_DSQ6A', 'D1_DSQ6B', 'D2_DSQ6B',
     'D1_ME44', 'D2_ME44', 'D1_ME642', 'D2_ME642', 'D1_DSQ6B_LEFT',
     'D1_DSQ6B_RIGHT', 'D1_BYU_C6_Op10', 'D1_BYU_P4_Op18', 'D1_C6_4',
     'D1_C4_1', 'D1_A4_3', 'D2_2C4_1', 'D2_2C6_1', 'D2_2A_1',
 ]
 # (interior, BH) pairs as used with BHMask.
-BH_PAIRS = [('D1_JP6_JT4', 'D1_ME642'), ('D2_JP6_JT4', 'D2_ME642'), ('D1_JP6', 'D1_ME642'), ('D2_JP6', 'D2_ME642'), ('D1_JT6', 'D1_ME44')]
+BH_PAIRS = [('D1_JP6_JT4', 'D1_ME642'), ('D2_JP6_JT4', 'D2_ME642'), ('D1_JP6', 'D1_ME642'), ('D2_JP6', 'D2_ME642'), ('D1_JT6', 'D1_ME44'), ('D2_JT6', 'D2_ME642')]
 
 
 def dense_storage(N, kl, ku, coeffs, bcoeffs, parity, klt, kut):

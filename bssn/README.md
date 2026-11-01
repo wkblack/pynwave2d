@@ -62,10 +62,13 @@ Parameter files are [TOML](https://toml.io), passed as the sole argument to
 Stencil names: explicit `E4`, `E42`, `E44`, `E6`/`E642`, `E666`; compact `JT4`, `JT6`,
 `JP6`, `JP6_JT4`, `KP4` (D1 only), `DSQ6A`, `DSQ6B`; mixed `ME4`/`ME44`, `ME6`/`ME642`.
 
+`JT6` is available for both derivatives (sixth order everywhere; Tyler 2007,
+BYU MS thesis, Tables 2, 25 and 27), and is the most accurate choice.
 `JP6` is not convergent: its second boundary row drops a term, so even a
 linear function is differentiated wrongly there.  `JP6_JT4` keeps the JP6
-interior (sixth order) and uses the two JT4 boundary rows (fourth order); it
-works with `BHMask`.  `JP6` itself is left unchanged.
+interior (sixth order) and uses the two JT4 boundary rows (fourth order).
+Unlike `JT6`, it is also stable with Dirichlet boundaries.  Both work with
+`BHMask`; `JP6` itself is left unchanged.
 
 ### BH stencil mask *(optional)*
 
