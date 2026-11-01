@@ -17,7 +17,6 @@ CompactFirstDerivatives = [
     DerivType.D1_JT4,
     DerivType.D1_JT6,
     DerivType.D1_JP6,
-    DerivType.D1_JP6_REPAIRED,
     DerivType.D1_JP6_JT4,
     DerivType.D1_DSQ6A,
     DerivType.D1_DSQ6B,
@@ -37,7 +36,6 @@ CompactSecondDerivatives = [
     DerivType.D2_JT4,
     DerivType.D2_JT6,
     DerivType.D2_JP6,
-    DerivType.D2_JP6_REPAIRED,
     DerivType.D2_JP6_JT4,
     DerivType.D2_DSQ6A,
     DerivType.D2_DSQ6B,
@@ -54,9 +52,6 @@ CompactExplicitDerivatives = [
 ]
 
 
-RepairedDerivatives = (DerivType.D1_JP6_REPAIRED, DerivType.D2_JP6_REPAIRED)
-
-
 class NCompactDerivative:
     def __init__(
         self, N: int, dtype: DerivType, method: CFDSolve, Pmat, Qmat, denom, mask=None
@@ -64,14 +59,6 @@ class NCompactDerivative:
         """
         Initialize the NCompactDerivative class.
         """
-        if dtype in RepairedDerivatives:
-            if N < 56:
-                raise ValueError("JP6_REPAIRED requires at least 56 allocated points")
-            if mask is not None:
-                raise ValueError("JP6_REPAIRED does not support BH masks")
-            if method not in (CFDSolve.LUSOLVE, CFDSolve.SCIPY):
-                raise ValueError("JP6_REPAIRED supports only structured LUSOLVE or generic SCIPY")
-
         if dtype in CompactExplicitDerivatives:
             if method != CFDSolve.D_LU and method != CFDSolve.D_INV:
                 print(
@@ -96,22 +83,7 @@ class NCompactDerivative:
         self.mask = mask
         self.HAVE_ADVECTIVE_DERIV = False
 
-        if dtype in RepairedDerivatives and method == CFDSolve.SCIPY:
-            self.solver_kind = "scipy-wide-banded-reference"
-
-        if dtype in RepairedDerivatives and method == CFDSolve.LUSOLVE:
-            from .jp6_repaired import BoundaryWoodbury, BorderedDerivative
-            if dtype == DerivType.D1_JP6_REPAIRED:
-                P0, Q0 = build_derivative(N, DerivType.D1_JP6)
-                original = NCompactDerivative(
-                    N, DerivType.D1_JP6, CFDSolve.LUSOLVE, P0, Q0, denom
-                )
-                self.structured_solver = BoundaryWoodbury(original, self)
-                self.solver_kind = "pentadiagonal-lu-woodbury"
-            else:
-                self.structured_solver = BorderedDerivative(self)
-                self.solver_kind = "pentadiagonal-lu-bordered"
-        elif self.method == CFDSolve.LUSOLVE:
+        if self.method == CFDSolve.LUSOLVE:
             # factor the P matrix for LU solve
             self.lu_factorization = lu_banded(
                 self.Pbands,
@@ -151,8 +123,6 @@ class NCompactDerivative:
         """
         Factory method to create combined derivative for BH
         """
-        if dtype0 in RepairedDerivatives or dtypeBH in RepairedDerivatives:
-            raise ValueError("JP6_REPAIRED does not support BH masks")
         N = len(r)
         dr = r[1] - r[0]
         if dtype0 in CompactFirstDerivatives:
@@ -181,14 +151,6 @@ class NCompactDerivative:
         """
         Factory method to create an instance based on the derivative type.
         """
-        if dtype in RepairedDerivatives:
-            r = np.asarray(r)
-            if r.ndim != 1 or len(r) < 56:
-                raise ValueError("JP6_REPAIRED requires at least 56 allocated points")
-            if not np.isfinite(r).all() or not np.all(np.diff(r) > 0):
-                raise ValueError("JP6_REPAIRED requires a finite increasing grid")
-            if not np.allclose(np.diff(r), r[1] - r[0], rtol=1e-10, atol=0):
-                raise ValueError("JP6_REPAIRED requires a uniform grid")
         N = len(r)
         dr = r[1] - r[0]
         if dtype in CompactFirstDerivatives:
@@ -271,15 +233,6 @@ class NCompactDerivative:
         """
         if len(f) != self.N:
             raise ValueError(f"Input array length {len(f)} does not match N {self.N}")
-
-        if self.dtype in RepairedDerivatives:
-            f = np.asarray(f)
-            if f.shape != (self.N,) or f.dtype != np.dtype("float64"):
-                raise ValueError("JP6_REPAIRED expects one real float64 vector")
-            if not np.isfinite(f).all():
-                raise ValueError("JP6_REPAIRED requires finite input")
-            if self.method == CFDSolve.LUSOLVE:
-                return self.structured_solver.grad(f)
 
         if self.method == CFDSolve.LUSOLVE:
             # DGBMV is about 4 times slower than numpy matmul
@@ -407,18 +360,23 @@ def _coeffs_D2_JTP6():
 
 
 def _coeffs_D1_JP6_JT4():
-    """JP6 interior, joint JT4 boundary rows: sixth/fourth order respectively."""
+    """
+    JP6 interior with the two JT4 boundary rows (fourth order at the edge).
+    JP6's own second row drops the left beta term, so it is not consistent.
+    """
     P, Q = _coeffs_D1_JTP6()
     P4, Q4 = _coeffs_D1_JTT4()
-    P[1], Q[1] = [P4[1][0], P4[0]], [Q4[1][0], Q4[0]]
+    P[1] = [P4[1][0], P4[0]]
+    Q[1] = [Q4[1][0], Q4[0]]
     return P, Q
 
 
 def _coeffs_D2_JP6_JT4():
-    """Second derivative companion; the existing JP6 selector is unchanged."""
+    """Second-derivative counterpart of _coeffs_D1_JP6_JT4."""
     P, Q = _coeffs_D2_JTP6()
     P4, Q4 = _coeffs_D2_JTT4()
-    P[1], Q[1] = [P4[1][0], P4[0]], [Q4[1][0], Q4[0]]
+    P[1] = [P4[1][0], P4[0]]
+    Q[1] = [Q4[1][0], Q4[0]]
     return P, Q
 
 
@@ -1339,19 +1297,7 @@ def build_derivative(N: int, dtype: DerivType):
     Returns:
     np.ndarray: Banded matrix for the specified derivative.
     """
-    if dtype in RepairedDerivatives:
-        if N < 56:
-            raise ValueError("JP6_REPAIRED requires at least 56 allocated points")
-        from .jp6_repaired_data import BOUNDARIES
-        order = 1 if dtype == DerivType.D1_JP6_REPAIRED else 2
-        Pmat, Qmat = _coeffs_D1_JTP6() if order == 1 else _coeffs_D2_JTP6()
-        rows = BOUNDARIES[order]
-        bands = rows["bands"]
-        Pmat[0] = np.pad(Pmat[0], (bands[0] - Pmat[2][0], bands[1] - Pmat[2][1]))
-        Pmat[2] = bands
-        Pmat[1] = [np.array(row) for row in rows["P"]]
-        Qmat[1] = [np.array(row) for row in rows["Q"]]
-    elif dtype == DerivType.D1_JT4:
+    if dtype == DerivType.D1_JT4:
         Pmat, Qmat = _coeffs_D1_JTT4()
     elif dtype == DerivType.D2_JT4:
         Pmat, Qmat = _coeffs_D2_JTT4()
@@ -1463,8 +1409,6 @@ def build_bh_derivative(N: int, dtype0: DerivType, dtypeBH: DerivType, mask):
     Returns:
         tuple: Banded matrices for the interior and boundary handling regions.
     """
-    if dtype0 in RepairedDerivatives or dtypeBH in RepairedDerivatives:
-        raise ValueError("JP6_REPAIRED does not support BH masks")
     P0mat, Q0mat = build_derivative(N, dtype0)
     p0bands = P0mat[1]
     q0bands = Q0mat[1]
