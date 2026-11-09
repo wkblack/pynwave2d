@@ -14,6 +14,23 @@ import tomllib
 from nwave import *
 
 
+def require_finite_state(u, step):
+    """Reject any non-finite evolved field before diagnostics or output."""
+    for field, values in enumerate(u):
+        if not np.isfinite(values).all():
+            raise FloatingPointError(
+                f"Non-finite evolved field {field} at step {step}"
+            )
+
+
+def update_horizon_tracking(radius, mass, previous_guess, previous_mask_radius):
+    """Keep a valid search guess and explicitly retain the last valid mask."""
+    if radius is not None and np.isfinite(radius) and radius > 0.0:
+        return radius, mass, radius, radius
+    print("Horizon not found; retaining search guess and last valid mask radius.")
+    return 0.0, 0.0, previous_guess, previous_mask_radius
+
+
 def main(parfile):
     # Read parameters
     with open(parfile, "rb") as f:
@@ -79,6 +96,7 @@ def main(parfile):
         have_d2=True,
     )
     eqs.initialize(g, params)
+    require_finite_state(eqs.u, 0)
 
     output_dir = params["output_dir"] + "_" + str(level)
     output_interval = params["output_interval"] * (1 << level)
@@ -94,15 +112,16 @@ def main(parfile):
     eqs.cal_constraints(eqs.u, g)
     rbh_guess = 0.7
     rbh, mbh, rTheta = eqs.find_horizon(g, rbh_guess)
-    if rbh == None:
-        rbh = 0.0
-        mbh = 0.0
+    horizon_found = rbh is not None and np.isfinite(rbh) and rbh > 0.0
+    rbh, mbh, rbh_guess, mask_radius = update_horizon_tracking(
+        rbh, mbh, rbh_guess, 0.0
+    )
     eqs.set_ah(rbh, mbh)
     bhpts = int(rbh * len(r) / (r[-1] - r[0]))
     print(f"Horizon(s) found at {rbh:03f} with masses {mbh:03f} and bhpts={bhpts:d}")
     rmask = params.get("bhmask_outer_radius", 75.0)
     bhmask = np.ones(Nr, dtype=int)
-    butil.set_bhmask(bhmask, r, rbh, rmask)
+    butil.set_bhmask(bhmask, r, mask_radius, rmask)
 
     step = 0
     fname = f"{output_dir}/bssn_{step:04d}.curve"
@@ -115,7 +134,7 @@ def main(parfile):
     conname = f"{output_dir}/bssn_constraints.dat"
     confile = open(conname, mode="w", newline="")
     writer = csv.writer(confile)
-    writer.writerow(["time", "Ham", "Mom", "radius_bh", "mass_bh"])
+    writer.writerow(["time", "Ham", "Mom", "radius_bh", "mass_bh", "horizon_found", "mask_inner_radius"])
     writer.writerow(
         [
             time,
@@ -123,6 +142,8 @@ def main(parfile):
             l2norm_mask(eqs.C[1], dr, bhmask),
             rbh,
             mbh,
+            horizon_found,
+            mask_radius,
         ]
     )
 
@@ -143,20 +164,25 @@ def main(parfile):
             for j in range(eqs.Nu):
                 eqs.u[j][:] = filvar.filter(eqs.u[j])
 
+        try:
+            require_finite_state(eqs.u, i)
+        except FloatingPointError:
+            confile.close()
+            raise
         time += dt
         if i % print_interval == 0 or i % output_interval == 0:
             eqs.cal_constraints(eqs.u, g)
-            rbh_guess = rbh
             rbh, mbh, rTheta = eqs.find_horizon(g, rbh_guess)
-            if rbh == None:
-                rbh = 0.0
-                mbh = 0.0
+            horizon_found = rbh is not None and np.isfinite(rbh) and rbh > 0.0
+            rbh, mbh, rbh_guess, mask_radius = update_horizon_tracking(
+                rbh, mbh, rbh_guess, mask_radius
+            )
             eqs.set_ah(rbh, mbh)
             bhpts = int(rbh * len(r) / (r[-1] - r[0]))
             print(
                 f"Horizon(s) found at {rbh:.03f} with masses {mbh:03f} and pts (radius)={bhpts:d}."
             )
-            butil.set_bhmask(bhmask, r, rbh, rmask)
+            butil.set_bhmask(bhmask, r, mask_radius, rmask)
         if i % print_interval == 0:
             hamnorm = l2norm_mask(eqs.C[0], dr, bhmask)
             momnorm = l2norm_mask(eqs.C[1], dr, bhmask)
@@ -164,16 +190,13 @@ def main(parfile):
                 f"Step {i:d}, t={time:.2e}, |chi|={l2norm_mask(eqs.u[0], dr, bhmask):.2e}, |grr|={l2norm_mask(eqs.u[1], dr, bhmask):.2e}, |gtt|={l2norm_mask(eqs.u[2], dr, bhmask):.2e}, |Arr|={l2norm_mask(eqs.u[3], dr, bhmask):.2e}, |K|={l2norm_mask(eqs.u[4], dr, bhmask):.2e}, |Gt|={l2norm_mask(eqs.u[5], dr, bhmask):.2e}, |alpha|={l2norm_mask(eqs.u[6], dr, bhmask):.2e}, |beta|={l2norm_mask(eqs.u[7], dr, bhmask):.2e}, |gB|={l2norm_mask(eqs.u[8], dr, bhmask):.2e}, |Ham|={hamnorm:.2e}, |Mom|={momnorm:.2e}"
             )
             rbh, mbh = eqs.get_ah()
-            writer.writerow([time, hamnorm, momnorm, rbh, mbh])
+            writer.writerow([time, hamnorm, momnorm, rbh, mbh, horizon_found, mask_radius])
         if i % output_interval == 0:
             fname = f"{output_dir}/bssn_{i:04d}.curve"
             butil.write_curve(fname, time, g.xi[0], eqs)
             #fname = f"{output_dir}/rtheta_{i:04d}.curve"
             #butil.write_curve_functions(fname, ["rTheta"], time, g.xi[0], [rTheta])
 
-        if np.isnan(eqs.u[1]).any():
-            print("Solution has a NaN.  Bye.")
-            break
 
     confile.close()
 
