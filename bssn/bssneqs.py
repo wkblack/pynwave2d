@@ -1031,7 +1031,7 @@ class BSSN(Equations):
         Gamcon[-nghost:-1] = 0.0
 
     def find_horizon(self, g: Grid, r0):
-        if r0 == None:
+        if r0 is None or not np.isfinite(r0) or r0 <= 0.0:
             r0 = 1.0
 
         r = g.xi[0]
@@ -1106,16 +1106,22 @@ def find_ah_zero(f: np.ndarray, x: np.ndarray, x1: float, x2: float):
         xout, xin = x2, x1
     if xout > xin:
         for k in range(kout, kin, -1):
+            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
+                return x[k]
             if f[k] * f[k - 1] < 0:
                 # Linear interpolation for zero crossing
                 xzero = x[k] - f[k] * (x[k] - x[k - 1]) / (f[k] - f[k - 1])
                 return xzero
     else:
         for k in range(kout, kin):
+            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
+                return x[k]
             if f[k] * f[k + 1] < 0:
                 # Linear interpolation for zero crossing
                 xzero = x[k] - f[k] * (x[k] - x[k + 1]) / (f[k] - f[k + 1])
                 return xzero
+    if f[kin] == 0.0 and min(x1, x2) <= x[kin] <= max(x1, x2):
+        return x[kin]
     return None
 
 
