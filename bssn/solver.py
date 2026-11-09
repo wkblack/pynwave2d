@@ -130,10 +130,11 @@ def main(parfile):
     filter_frequency = -1
     if g.num_filters > 0:
         for fx in g.Filter:
-            if fx.get_apply_filter == FilterApply.APPLY_VARS:
+            if fx.get_apply_filter() == FilterApply.APPLY_VARS:
+                if filvar is not None:
+                    raise ValueError("Multiple Vars filters are unsupported; configure one explicitly.")
                 filvar = fx
                 filter_frequency = fx.get_frequency()
-                break
 
     for i in range(1, Nt + 1):
         rk4.step(eqs, g, dt)

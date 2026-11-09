@@ -41,11 +41,11 @@ class RK4:
         assert len(k4) == e.Nu, "RK: wrong number of work arrays"
         # print(f"k3 shape = {k3[0].shape}")
 
-        rhsfilter = None
+        rhsfilters = []
         if self.do_rhs_filter:
             for fx in g.Filter:
                 if fx.get_apply_filter() == FilterApply.RHS:
-                    rhsfilter = fx
+                    rhsfilters.append(fx)
 
         # Stage 1
         if LTRACE:
@@ -57,8 +57,9 @@ class RK4:
         if self.do_rhs_filter:
             for i in range(nu):
                 # print(f"calling filter {i}. sigma = {g.Filter.get_sigma()}")
-                wrk = rhsfilter.filter(u0[i])
-                k1[i] += wrk
+                for rhsfilter in rhsfilters:
+                    wrk = rhsfilter.filter(u0[i])
+                    k1[i] += wrk
         for i in range(nu):
             us[i][:] = u0[i][:] + 0.5 * dt * k1[i][:]
 
@@ -82,8 +83,9 @@ class RK4:
         e.rhs(k2, us, g)
         if self.do_rhs_filter:
             for i in range(nu):
-                wrk = rhsfilter.filter(us[i])
-                k2[i] += wrk
+                for rhsfilter in rhsfilters:
+                    wrk = rhsfilter.filter(us[i])
+                    k2[i] += wrk
         for i in range(nu):
             us[i][:] = u0[i][:] + 0.5 * dt * k2[i][:]
         if e.apply_bc == BCType.FUNCTION:
@@ -93,8 +95,9 @@ class RK4:
         e.rhs(k3, us, g)
         if self.do_rhs_filter:
             for i in range(nu):
-                wrk = rhsfilter.filter(us[i])
-                k3[i] += wrk
+                for rhsfilter in rhsfilters:
+                    wrk = rhsfilter.filter(us[i])
+                    k3[i] += wrk
         for i in range(nu):
             us[i][:] = u0[i][:] + dt * k3[i][:]
         if e.apply_bc == BCType.FUNCTION:
@@ -104,8 +107,9 @@ class RK4:
         e.rhs(self.k4, us, g)
         if self.do_rhs_filter:
             for i in range(nu):
-                wrk = rhsfilter.filter(us[i])
-                k4[i] += wrk
+                for rhsfilter in rhsfilters:
+                    wrk = rhsfilter.filter(us[i])
+                    k4[i] += wrk
         for i in range(nu):
             u0[i][:] += dt / 6 * (k1[i][:] + 2 * k2[i][:] + 2 * k3[i][:] + k4[i][:])
         if e.apply_bc == BCType.FUNCTION:

@@ -320,7 +320,9 @@ def _coeffs_D1_JTP6():
     Lcoeffb0 = np.array([1.0, 8.0, 6.0])
     Lcoeffb1 = np.array([alpha, 1.0, alpha, beta])
     Rcoeffb0 = np.array([-43 / 12, -20 / 3, 9, 4 / 3, -1 / 12])
-    Rcoeffb1 = np.array([-a / 2, 0.0, a / 2])
+    # Match moments through degree 6 for the truncated implicit row.
+    Rcoeffb1 = np.array([-2023/2280, 293/760, 131/1368, 41/57,
+                         -67/152, 1019/6840, -49/2280])
     Lbands = (2, 2)
     Rbands = (1, 1)
     Lmat = [Lcoeff, [Lcoeffb0, Lcoeffb1], Lbands, 1]
@@ -338,7 +340,9 @@ def _coeffs_D2_JTP6():
     Lcoeffb0 = np.array([1.0, 11 / 2, -131 / 4])
     Lcoeffb1 = np.array([alpha, 1.0, alpha, beta])
     Rcoeffb0 = np.array([177 / 16, -507 / 8, 783 / 8, -201 / 4, 81 / 16, -3 / 8])
-    Rcoeffb1 = np.array([a, -2 * a, a])
+    # Match moments through degree 7 for the truncated implicit row.
+    Rcoeffb1 = np.array([4669/3492, -104753/34920, 4791/1940, -1457/873,
+                         4891/3492, -561/776, 3689/17460, -469/17460])
     Lbands = (2, 2)
     Rbands = (1, 1)
     Lmat = [Lcoeff, [Lcoeffb0, Lcoeffb1], Lbands, 1]

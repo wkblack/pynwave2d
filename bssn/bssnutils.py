@@ -240,6 +240,10 @@ def parse_filter_entry(entry: dict[str, Any], r) -> Filter1D:
     if ffreq < 0:
         raise ValueError(f"Filter: 'frequency' must be 0 or positive if provided.")
 
+    if ftype in (FilterType.KREISS_OLIGER_O6, FilterType.KREISS_OLIGER_O8):
+        if fapply != FilterApply.RHS or ffreq != 1:
+            raise ConfigError("KO dissipation supports only apply=Rhs and frequency=1.")
+
     if ftype == FilterType.KREISS_OLIGER_O6:
         sigma = entry.get("sigma", 0.1)
         bssn_filter = KreissOligerFilterO6_1D(dr, sigma, filter_boundary=fbounds)
