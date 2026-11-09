@@ -1,0 +1,94 @@
+F.EEEFEF
+======================================================================
+ERROR: test_horizon_roots (__main__.RuntimeTests.test_horizon_roots)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 50, in test_horizon_roots
+    self.assertAlmostEqual(b.find_ah_zero(x-root,x,lo,hi),root)
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/case.py", line 916, in assertAlmostEqual
+    diff = abs(first - second)
+               ~~~~~~^~~~~~~~
+TypeError: unsupported operand type(s) for -: 'NoneType' and 'float'
+
+======================================================================
+ERROR: test_horizon_tracking (__main__.RuntimeTests.test_horizon_tracking)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 54, in test_horizon_tracking
+    good=solver.update_horizon_tracking(.5,1.,.7,0.)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'solver' has no attribute 'update_horizon_tracking'
+
+======================================================================
+ERROR: test_masked_writer (__main__.RuntimeTests.test_masked_writer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 24, in test_masked_writer
+    f=Path(d)/'a.curve'; util.write_curve_masked(f,0.,np.array([10.,11.,12.]),e,np.array([1.,0.,1.]))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/e1a39ef4befa/pynwave2d/bssn/bssnutils.py", line 43, in write_curve_masked
+    for xi, di in zip(rr, umask):
+                      ^^
+NameError: name 'rr' is not defined
+
+======================================================================
+ERROR: test_nonfinite_every_field (__main__.RuntimeTests.test_nonfinite_every_field)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 64, in test_nonfinite_every_field
+    with self.assertRaises(FloatingPointError):solver.require_finite_state(u,7)
+                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'solver' has no attribute 'require_finite_state'
+
+======================================================================
+FAIL: test_clean_import (__main__.RuntimeTests.test_clean_import)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 19, in test_clean_import
+    self.assertEqual(p.returncode,0,p.stderr)
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/workspace/scratch/e1a39ef4befa/pynwave2d/bssn/bssnutils.py", line 222, in <module>
+    def _require(dct: dict[str, Any], key: str, kind: str = "entry"):
+                                ^^^
+NameError: name 'Any' is not defined. Did you mean: 'any'?
+
+
+======================================================================
+FAIL: test_none_filter (__main__.RuntimeTests.test_none_filter)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 29, in test_none_filter
+    self.assertIsInstance(fs[0],FilterNone_1D)
+AssertionError: None is not an instance of <class 'nwave.filters.FilterNone_1D'>
+
+======================================================================
+FAIL: test_stage_regularization (__main__.RuntimeTests.test_stage_regularization)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 37, in test_stage_regularization
+    for original,current in zip(base,e.u): np.testing.assert_array_equal(current,original)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/numpy/testing/_private/utils.py", line 1054, in assert_array_equal
+    assert_array_compare(operator.__eq__, actual, desired, err_msg=err_msg,
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/numpy/testing/_private/utils.py", line 919, in assert_array_compare
+    raise AssertionError(msg)
+AssertionError: 
+Arrays are not equal
+
+Mismatched elements: 3 / 27 (11.1%)
+Max absolute difference among violations: 5.
+Max relative difference among violations: 3.
+ ACTUAL: array([ 5.,  4.,  3.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11., 12.,
+       13., 14., 15., 16., 17., 18., 19., 20., 21., 22., 23., 24., 25.,
+       26.])
+ DESIRED: array([ 0.,  1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11., 12.,
+       13., 14., 15., 16., 17., 18., 19., 20., 21., 22., 23., 24., 25.,
+       26.])
+
+----------------------------------------------------------------------
+Ran 8 tests in 1.831s
+
+FAILED (failures=3, errors=4)
+Grid1D: nx=22, xmin=-2.1, xmax=2.1, dx=0.2, ng=3 cell_centered=True
+Grid1D: nx=21, xmin=0.05, xmax=2.05, dx=0.1, ng=3 cell_centered=True

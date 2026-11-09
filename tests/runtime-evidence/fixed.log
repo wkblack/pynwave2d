@@ -1,0 +1,17 @@
+.....E..
+======================================================================
+ERROR: test_none_filter (__main__.RuntimeTests.test_none_filter)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/e1a39ef4befa/runtime-fixes/tests/test_bssn_runtime.py", line 30, in test_none_filter
+    self.assertEqual(fs[0].get_apply_filter(),FilterApply.APPLY_NONE)
+                                              ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'FilterApply' has no attribute 'APPLY_NONE'
+
+----------------------------------------------------------------------
+Ran 8 tests in 2.287s
+
+FAILED (errors=1)
+Grid1D: nx=22, xmin=-2.1, xmax=2.1, dx=0.2, ng=3 cell_centered=True
+Horizon not found; retaining search guess and last valid mask radius.
+Grid1D: nx=21, xmin=0.05, xmax=2.05, dx=0.1, ng=3 cell_centered=True
