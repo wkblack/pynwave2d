@@ -853,15 +853,15 @@ class BSSN(Equations):
         ng = g.nghost
 
         if self.extended_domain == False:
-            set_inner_regularity(self.u[self.U_CHI], ng, 1)
-            set_inner_regularity(self.u[self.U_GRR], ng, 1)
-            set_inner_regularity(self.u[self.U_GTT], ng, 1)
-            set_inner_regularity(self.u[self.U_ARR], ng, 1)
-            set_inner_regularity(self.u[self.U_K], ng, 1)
-            set_inner_regularity(self.u[self.U_GT], ng, -1)
-            set_inner_regularity(self.u[self.U_ALPHA], ng, 1)
-            set_inner_regularity(self.u[self.U_SHIFT], ng, -1)
-            set_inner_regularity(self.u[self.U_GB], ng, -1)
+            set_inner_regularity(u[self.U_CHI], ng, 1)
+            set_inner_regularity(u[self.U_GRR], ng, 1)
+            set_inner_regularity(u[self.U_GTT], ng, 1)
+            set_inner_regularity(u[self.U_ARR], ng, 1)
+            set_inner_regularity(u[self.U_K], ng, 1)
+            set_inner_regularity(u[self.U_GT], ng, -1)
+            set_inner_regularity(u[self.U_ALPHA], ng, 1)
+            set_inner_regularity(u[self.U_SHIFT], ng, -1)
+            set_inner_regularity(u[self.U_GB], ng, -1)
 
     def cal_constraints(self, u, g: Grid):
         """
