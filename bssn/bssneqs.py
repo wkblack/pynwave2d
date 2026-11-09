@@ -476,6 +476,10 @@ class BSSN(Equations):
                 ad_B_r,
             ]
             for m in range(len(u)):
+                if m == self.U_GTT:
+                    BSSN.bc_spherical_gtt(dtu[m], u[m], dxu[m], r,
+                                          self.u_wavespeed[m], ng, self.extended_domain)
+                    continue
                 BSSN.bc_sommerfeld(
                     dtu[m],
                     u[m],
@@ -937,22 +941,38 @@ class BSSN(Equations):
         )
 
     @staticmethod
+    def bc_spherical_gtt(dtu, u, dxu, r, v, ng, extended_domain):
+        """Radiate q=g_tt/r**2-1 with q=F(|r|-v*t)/|r|.
+
+        Unlike a constant Cartesian asymptote, the spherical background r**2
+        has a nonzero radial derivative. This condition preserves it exactly.
+        """
+        dtu[-ng:] = -v * (dxu[-ng:] - 2*r[-ng:]
+                          - (u[-ng:] - r[-ng:]**2)/np.abs(r[-ng:]))
+        if extended_domain:
+            dtu[:ng] = v * (dxu[:ng] - 2*r[:ng]
+                           + (u[:ng] - r[:ng]**2)/np.abs(r[:ng]))
+
+    @staticmethod
     def bc_sommerfeld(dtu, u, dxu, r, n_falloff, u_inf, v, ng, extended_domain):
         """
         Radiative (Sommerfeld) outer boundary condition with per-variable
         characteristic (wave) speed v:
 
-            dtu = -v [ dxu + n (u - u_inf)/r ]        (outgoing at r_max)
+            dtu = -v [ sign(r) dxu + n (u - u_inf)/abs(r) ]
+
+        The radial derivative changes direction at the negative boundary, but
+        the falloff term uses the positive radius at both boundaries.
 
         The per-variable falloff power n and asymptotic value u_inf encode each
-        field's radial structure (e.g. gtt ~ r^2 via n<0). v=1 reproduces the
-        previously-validated BC exactly.
+        field's radial structure (e.g. gtt ~ r^2 via n<0). The supplied speed
+        v is retained at both boundaries.
         """
         if n_falloff < 0:
             u_inf = r[-1] ** (abs(n_falloff))
-        dtu[-ng:] = -v * (dxu[-ng:] + n_falloff * (u[-ng:] - u_inf) / r[-ng:])
+        dtu[-ng:] = -v * (dxu[-ng:] + n_falloff * (u[-ng:] - u_inf) / np.abs(r[-ng:]))
         if extended_domain:
-            dtu[:ng] = v * (dxu[:ng] - n_falloff * (u[:ng] - u_inf) / r[:ng])
+            dtu[:ng] = v * (dxu[:ng] - n_falloff * (u[:ng] - u_inf) / np.abs(r[:ng]))
 
     @staticmethod
     @njit
@@ -1023,12 +1043,12 @@ class BSSN(Equations):
                 Mom[i] = 0.0
                 Gamcon[i] = 0.0
 
-        Ham[0:nghost] = 0.0
-        Ham[-nghost:-1] = 0.0
-        Mom[0:nghost] = 0.0
-        Mom[-nghost:-1] = 0.0
-        Gamcon[0:nghost] = 0.0
-        Gamcon[-nghost:-1] = 0.0
+        Ham[:nghost] = 0.0
+        Ham[-nghost:] = 0.0
+        Mom[:nghost] = 0.0
+        Mom[-nghost:] = 0.0
+        Gamcon[:nghost] = 0.0
+        Gamcon[-nghost:] = 0.0
 
     def find_horizon(self, g: Grid, r0):
         if r0 == None:
