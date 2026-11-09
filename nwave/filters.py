@@ -217,7 +217,7 @@ class KreissOligerFilterO8_1D(Filter1D):
             spr3 = smr3
             spr2 = smr2
             spr1 = smr1
-            du[0] = sigma * (-u[5] + 4.0 * u[4] - 6.0 * u[3] + 4.0 * u[1] - u[5]) / smr4
+            du[0] = sigma * (-u[4] + 4.0 * u[3] - 6.0 * u[2] + 4.0 * u[1] - u[0]) / smr4
             du[1] = (
                 sigma
                 * (2.0 * u[4] - 9.0 * u[3] + 15.0 * u[2] - 11.0 * u[1] + 3.0 * u[0])
