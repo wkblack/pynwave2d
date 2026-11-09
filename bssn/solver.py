@@ -14,6 +14,15 @@ import tomllib
 from nwave import *
 
 
+def require_finite_state(u, step):
+    """Reject any non-finite evolved field before diagnostics or output."""
+    for field, values in enumerate(u):
+        if not np.isfinite(values).all():
+            raise FloatingPointError(
+                f"Non-finite evolved field {field} at step {step}"
+            )
+
+
 def main(parfile):
     # Read parameters
     with open(parfile, "rb") as f:
@@ -79,6 +88,7 @@ def main(parfile):
         have_d2=True,
     )
     eqs.initialize(g, params)
+    require_finite_state(eqs.u, 0)
 
     output_dir = params["output_dir"] + "_" + str(level)
     output_interval = params["output_interval"] * (1 << level)
@@ -143,6 +153,11 @@ def main(parfile):
             for j in range(eqs.Nu):
                 eqs.u[j][:] = filvar.filter(eqs.u[j])
 
+        try:
+            require_finite_state(eqs.u, i)
+        except FloatingPointError:
+            confile.close()
+            raise
         time += dt
         if i % print_interval == 0 or i % output_interval == 0:
             eqs.cal_constraints(eqs.u, g)
@@ -171,9 +186,6 @@ def main(parfile):
             #fname = f"{output_dir}/rtheta_{i:04d}.curve"
             #butil.write_curve_functions(fname, ["rTheta"], time, g.xi[0], [rTheta])
 
-        if np.isnan(eqs.u[1]).any():
-            print("Solution has a NaN.  Bye.")
-            break
 
     confile.close()
 

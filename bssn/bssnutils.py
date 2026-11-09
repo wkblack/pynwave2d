@@ -40,7 +40,7 @@ def write_curve_masked(filename, time, x, eqs, mask):
         for m in range(len(eqs.c_names)):
             f.write(f"# {eqs.c_names[m]}\n")
             umask[:] = eqs.C[m][:] * mask[:]
-            for xi, di in zip(rr, umask):
+            for xi, di in zip(x, umask):
                 f.write(f"{xi:.8e} {di:.8e}\n")
 
 
