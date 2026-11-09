@@ -853,15 +853,15 @@ class BSSN(Equations):
         ng = g.nghost
 
         if self.extended_domain == False:
-            set_inner_regularity(self.u[self.U_CHI], ng, 1)
-            set_inner_regularity(self.u[self.U_GRR], ng, 1)
-            set_inner_regularity(self.u[self.U_GTT], ng, 1)
-            set_inner_regularity(self.u[self.U_ARR], ng, 1)
-            set_inner_regularity(self.u[self.U_K], ng, 1)
-            set_inner_regularity(self.u[self.U_GT], ng, -1)
-            set_inner_regularity(self.u[self.U_ALPHA], ng, 1)
-            set_inner_regularity(self.u[self.U_SHIFT], ng, -1)
-            set_inner_regularity(self.u[self.U_GB], ng, -1)
+            set_inner_regularity(u[self.U_CHI], ng, 1)
+            set_inner_regularity(u[self.U_GRR], ng, 1)
+            set_inner_regularity(u[self.U_GTT], ng, 1)
+            set_inner_regularity(u[self.U_ARR], ng, 1)
+            set_inner_regularity(u[self.U_K], ng, 1)
+            set_inner_regularity(u[self.U_GT], ng, -1)
+            set_inner_regularity(u[self.U_ALPHA], ng, 1)
+            set_inner_regularity(u[self.U_SHIFT], ng, -1)
+            set_inner_regularity(u[self.U_GB], ng, -1)
 
     def cal_constraints(self, u, g: Grid):
         """
@@ -942,17 +942,20 @@ class BSSN(Equations):
         Radiative (Sommerfeld) outer boundary condition with per-variable
         characteristic (wave) speed v:
 
-            dtu = -v [ dxu + n (u - u_inf)/r ]        (outgoing at r_max)
+            dtu = -v [ sign(r) dxu + n (u - u_inf)/abs(r) ]
+
+        The radial derivative changes direction at the negative boundary, but
+        the falloff term uses the positive radius at both boundaries.
 
         The per-variable falloff power n and asymptotic value u_inf encode each
-        field's radial structure (e.g. gtt ~ r^2 via n<0). v=1 reproduces the
-        previously-validated BC exactly.
+        field's radial structure (e.g. gtt ~ r^2 via n<0). The supplied speed
+        v is retained at both boundaries.
         """
         if n_falloff < 0:
             u_inf = r[-1] ** (abs(n_falloff))
-        dtu[-ng:] = -v * (dxu[-ng:] + n_falloff * (u[-ng:] - u_inf) / r[-ng:])
+        dtu[-ng:] = -v * (dxu[-ng:] + n_falloff * (u[-ng:] - u_inf) / np.abs(r[-ng:]))
         if extended_domain:
-            dtu[:ng] = v * (dxu[:ng] - n_falloff * (u[:ng] - u_inf) / r[:ng])
+            dtu[:ng] = v * (dxu[:ng] - n_falloff * (u[:ng] - u_inf) / np.abs(r[:ng]))
 
     @staticmethod
     @njit
@@ -1023,15 +1026,15 @@ class BSSN(Equations):
                 Mom[i] = 0.0
                 Gamcon[i] = 0.0
 
-        Ham[0:nghost] = 0.0
-        Ham[-nghost:-1] = 0.0
-        Mom[0:nghost] = 0.0
-        Mom[-nghost:-1] = 0.0
-        Gamcon[0:nghost] = 0.0
-        Gamcon[-nghost:-1] = 0.0
+        Ham[:nghost] = 0.0
+        Ham[-nghost:] = 0.0
+        Mom[:nghost] = 0.0
+        Mom[-nghost:] = 0.0
+        Gamcon[:nghost] = 0.0
+        Gamcon[-nghost:] = 0.0
 
     def find_horizon(self, g: Grid, r0):
-        if r0 == None:
+        if r0 is None or not np.isfinite(r0) or r0 <= 0.0:
             r0 = 1.0
 
         r = g.xi[0]
@@ -1106,16 +1109,22 @@ def find_ah_zero(f: np.ndarray, x: np.ndarray, x1: float, x2: float):
         xout, xin = x2, x1
     if xout > xin:
         for k in range(kout, kin, -1):
+            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
+                return x[k]
             if f[k] * f[k - 1] < 0:
                 # Linear interpolation for zero crossing
                 xzero = x[k] - f[k] * (x[k] - x[k - 1]) / (f[k] - f[k - 1])
                 return xzero
     else:
         for k in range(kout, kin):
+            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
+                return x[k]
             if f[k] * f[k + 1] < 0:
                 # Linear interpolation for zero crossing
                 xzero = x[k] - f[k] * (x[k] - x[k + 1]) / (f[k] - f[k + 1])
                 return xzero
+    if f[kin] == 0.0 and min(x1, x2) <= x[kin] <= max(x1, x2):
+        return x[kin]
     return None
 
 

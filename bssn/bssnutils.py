@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 import os
+from typing import Any
 
 # from pdb import set_trace as bp
 
@@ -40,7 +41,7 @@ def write_curve_masked(filename, time, x, eqs, mask):
         for m in range(len(eqs.c_names)):
             f.write(f"# {eqs.c_names[m]}\n")
             umask[:] = eqs.C[m][:] * mask[:]
-            for xi, di in zip(rr, umask):
+            for xi, di in zip(x, umask):
                 f.write(f"{xi:.8e} {di:.8e}\n")
 
 
@@ -285,7 +286,7 @@ def parse_filter_entry(entry: dict[str, Any], r) -> Filter1D:
             )
             return bssn_filter
     elif ftype == FilterType.NONE:
-        pass
+        return FilterNone_1D()
     else:
         raise NotImplementedError(
             "init_filter>>  Filter = { KO6, KO8, JTT6, JTP6, JTT8, JTP8, KP4 }"
