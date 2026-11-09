@@ -40,7 +40,7 @@ def write_curve_masked(filename, time, x, eqs, mask):
         for m in range(len(eqs.c_names)):
             f.write(f"# {eqs.c_names[m]}\n")
             umask[:] = eqs.C[m][:] * mask[:]
-            for xi, di in zip(rr, umask):
+            for xi, di in zip(x, umask):
                 f.write(f"{xi:.8e} {di:.8e}\n")
 
 
@@ -240,6 +240,10 @@ def parse_filter_entry(entry: dict[str, Any], r) -> Filter1D:
     if ffreq < 0:
         raise ValueError(f"Filter: 'frequency' must be 0 or positive if provided.")
 
+    if ftype in (FilterType.KREISS_OLIGER_O6, FilterType.KREISS_OLIGER_O8):
+        if fapply != FilterApply.RHS or ffreq != 1:
+            raise ConfigError("KO dissipation supports only apply=Rhs and frequency=1.")
+
     if ftype == FilterType.KREISS_OLIGER_O6:
         sigma = entry.get("sigma", 0.1)
         bssn_filter = KreissOligerFilterO6_1D(dr, sigma, filter_boundary=fbounds)
@@ -285,7 +289,7 @@ def parse_filter_entry(entry: dict[str, Any], r) -> Filter1D:
             )
             return bssn_filter
     elif ftype == FilterType.NONE:
-        pass
+        return FilterNone_1D()
     else:
         raise NotImplementedError(
             "init_filter>>  Filter = { KO6, KO8, JTT6, JTP6, JTT8, JTP8, KP4 }"
@@ -316,6 +320,9 @@ def init_filter(r, params):
     for i, entry in enumerate(farray):
         spec = parse_filter_entry(entry, r)
         parsed.append(spec)
+
+    if sum(f.get_apply_filter() == FilterApply.APPLY_VARS for f in parsed) > 1:
+        raise ConfigError("Multiple Vars filters are unsupported; configure one explicitly.")
 
     return parsed
 

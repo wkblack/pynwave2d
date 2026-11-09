@@ -8,6 +8,8 @@ from numba import njit
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from nwave import *
+from gamma import gamma_constraint, reference_shift_divergence
+from hamiltonian import hamiltonians, chi_adjustment
 
 DEBUG = False
 
@@ -68,6 +70,9 @@ class BSSN(Equations):
         gbssn_system=GBSSNSystem(1, 1, 1),
         outer_bc=BSSNOuterBCType.SOMMERFELD,
         have_d2=True,
+        c_G=0.0,
+        c_H=0.0,
+        cfl=None,
     ):
         """
         Initialize the BSSN equations.
@@ -90,6 +95,17 @@ class BSSN(Equations):
         super().__init__(NU, g, apply_bc)
 
         self.gbssn_system = gbssn_system
+        if not np.isfinite(c_G):
+            raise ValueError("c_G must be finite")
+        self.c_G = float(c_G)
+        if not np.isfinite(c_H) or c_H < 0:
+            raise ValueError("c_H must be finite and nonnegative")
+        if c_H != 0.0 and (cfl is None or not np.isfinite(cfl) or cfl <= 0):
+            raise ValueError("Positive finite configured cfl is required for H damping")
+        if c_H != 0.0 and (not np.isfinite(g.dx[0]) or g.dx[0] <= 0):
+            raise ValueError("Positive finite radial spacing is required for H damping")
+        self.c_H = float(c_H)
+        self.cfl = cfl
         self.eta = eta
         self.M = M
         self.extended_domain = extended_domain
@@ -379,6 +395,15 @@ class BSSN(Equations):
             d_g_tt,
             v,
         )
+        # CAHD uses fresh RK-stage, unmasked reference-metric Hamiltonian.
+        # Follow existing derivative filtering policy; metric factors stay raw.
+        # Exact off branch avoids new arithmetic and 0*NaN propagation.
+        if self.c_H != 0.0:
+            H_g, H_B_ref = hamiltonians(
+                chi, g_rr, g_tt, A_rr, K, Gamma_r, d_chi, d_g_rr,
+                d_g_tt, d2_chi, d2_g_rr, d2_g_tt, d_Gamma_r, r
+            )
+            chi_rhs[:] += chi_adjustment(chi, H_B_ref, self.c_H, g.dx[0], self.cfl)
         BSSN.rhs_g_rr(
             g_rr_rhs, alpha, A_rr, g_rr, g_tt, beta_r, ad_g_rr, d_g_tt, d_beta_r, v
         )
@@ -443,6 +468,16 @@ class BSSN(Equations):
             ad_Gamma_r,
             v,
         )
+        # CCD: use this RK stage, never masked/stale diagnostic self.C.
+        # Match existing RHS policy: filtered derivatives, raw metric factors.
+        # Exact zero branch preserves baseline arithmetic and avoids 0*NaN.
+        if self.c_G != 0.0:
+            C_gamma = gamma_constraint(g_rr, g_tt, Gamma_r, d_g_rr, d_g_tt)
+            # NRPy fixes det(bar_gamma)=det(hat_gamma). Do not insert
+            # the numerically drifting metric determinant into this term.
+            div_beta = reference_shift_divergence(beta_r, d_beta_r, g.xi[0])
+            Gamma_r_rhs[:] -= self.c_G * C_gamma * div_beta
+        # The B driver must see the adjusted Gamma RHS.
         BSSN.rhs_gauge(
             alpha_rhs,
             beta_r_rhs,
@@ -853,15 +888,15 @@ class BSSN(Equations):
         ng = g.nghost
 
         if self.extended_domain == False:
-            set_inner_regularity(self.u[self.U_CHI], ng, 1)
-            set_inner_regularity(self.u[self.U_GRR], ng, 1)
-            set_inner_regularity(self.u[self.U_GTT], ng, 1)
-            set_inner_regularity(self.u[self.U_ARR], ng, 1)
-            set_inner_regularity(self.u[self.U_K], ng, 1)
-            set_inner_regularity(self.u[self.U_GT], ng, -1)
-            set_inner_regularity(self.u[self.U_ALPHA], ng, 1)
-            set_inner_regularity(self.u[self.U_SHIFT], ng, -1)
-            set_inner_regularity(self.u[self.U_GB], ng, -1)
+            set_inner_regularity(u[self.U_CHI], ng, 1)
+            set_inner_regularity(u[self.U_GRR], ng, 1)
+            set_inner_regularity(u[self.U_GTT], ng, 1)
+            set_inner_regularity(u[self.U_ARR], ng, 1)
+            set_inner_regularity(u[self.U_K], ng, 1)
+            set_inner_regularity(u[self.U_GT], ng, -1)
+            set_inner_regularity(u[self.U_ALPHA], ng, 1)
+            set_inner_regularity(u[self.U_SHIFT], ng, -1)
+            set_inner_regularity(u[self.U_GB], ng, -1)
 
     def cal_constraints(self, u, g: Grid):
         """
@@ -942,17 +977,20 @@ class BSSN(Equations):
         Radiative (Sommerfeld) outer boundary condition with per-variable
         characteristic (wave) speed v:
 
-            dtu = -v [ dxu + n (u - u_inf)/r ]        (outgoing at r_max)
+            dtu = -v [ sign(r) dxu + n (u - u_inf)/abs(r) ]
+
+        The radial derivative changes direction at the negative boundary, but
+        the falloff term uses the positive radius at both boundaries.
 
         The per-variable falloff power n and asymptotic value u_inf encode each
-        field's radial structure (e.g. gtt ~ r^2 via n<0). v=1 reproduces the
-        previously-validated BC exactly.
+        field's radial structure (e.g. gtt ~ r^2 via n<0). The supplied speed
+        v is retained at both boundaries.
         """
         if n_falloff < 0:
             u_inf = r[-1] ** (abs(n_falloff))
-        dtu[-ng:] = -v * (dxu[-ng:] + n_falloff * (u[-ng:] - u_inf) / r[-ng:])
+        dtu[-ng:] = -v * (dxu[-ng:] + n_falloff * (u[-ng:] - u_inf) / np.abs(r[-ng:]))
         if extended_domain:
-            dtu[:ng] = v * (dxu[:ng] - n_falloff * (u[:ng] - u_inf) / r[:ng])
+            dtu[:ng] = v * (dxu[:ng] - n_falloff * (u[:ng] - u_inf) / np.abs(r[:ng]))
 
     @staticmethod
     @njit
@@ -1023,15 +1061,15 @@ class BSSN(Equations):
                 Mom[i] = 0.0
                 Gamcon[i] = 0.0
 
-        Ham[0:nghost] = 0.0
-        Ham[-nghost:-1] = 0.0
-        Mom[0:nghost] = 0.0
-        Mom[-nghost:-1] = 0.0
-        Gamcon[0:nghost] = 0.0
-        Gamcon[-nghost:-1] = 0.0
+        Ham[:nghost] = 0.0
+        Ham[-nghost:] = 0.0
+        Mom[:nghost] = 0.0
+        Mom[-nghost:] = 0.0
+        Gamcon[:nghost] = 0.0
+        Gamcon[-nghost:] = 0.0
 
     def find_horizon(self, g: Grid, r0):
-        if r0 == None:
+        if r0 is None or not np.isfinite(r0) or r0 <= 0.0:
             r0 = 1.0
 
         r = g.xi[0]
@@ -1106,16 +1144,22 @@ def find_ah_zero(f: np.ndarray, x: np.ndarray, x1: float, x2: float):
         xout, xin = x2, x1
     if xout > xin:
         for k in range(kout, kin, -1):
+            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
+                return x[k]
             if f[k] * f[k - 1] < 0:
                 # Linear interpolation for zero crossing
                 xzero = x[k] - f[k] * (x[k] - x[k - 1]) / (f[k] - f[k - 1])
                 return xzero
     else:
         for k in range(kout, kin):
+            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
+                return x[k]
             if f[k] * f[k + 1] < 0:
                 # Linear interpolation for zero crossing
                 xzero = x[k] - f[k] * (x[k] - x[k + 1]) / (f[k] - f[k + 1])
                 return xzero
+    if f[kin] == 0.0 and min(x1, x2) <= x[kin] <= max(x1, x2):
+        return x[kin]
     return None
 
 

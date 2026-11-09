@@ -1,3 +1,6 @@
+# Experimental constraint damping; zero preserves the original evolution.
+# Positive c_H uses reference-metric H_B_ref; see tests/HAMILTONIAN_DAMPING_VALIDATION.md.
+c_H = 0.0
 Nt = 25000
 Nx =  10000
 Xmin =-100.0
