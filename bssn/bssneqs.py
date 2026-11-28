@@ -1271,12 +1271,19 @@ class BSSN(Equations):
         Gamcon[:nghost] = 0.0
         Gamcon[-nghost:] = 0.0
 
-    def find_horizon(self, g: Grid, r0):
+    def find_horizon(self, g: Grid, r0, interpolation="cubic", *, recover=False):
+        """Return radius, mass and expansion. Record (degree, fallback) for a hit.
+
+        Exact nodes use degree 1 with no fallback. A miss clears the record.
+        With recover=True, retry outside the tracking window on a miss.
+        """
+        if interpolation not in ("linear", "cubic"):
+            raise ValueError('horizon_interpolation must be "linear" or "cubic"')
+        self.horizon_interpolation_used = None
         if r0 is None or not np.isfinite(r0) or r0 <= 0.0:
             r0 = 1.0
 
         r = g.xi[0]
-        N = len(r)
         chi = self.u[self.U_CHI]
         g_rr = self.u[self.U_GRR]
         g_tt = self.u[self.U_GTT]
@@ -1286,84 +1293,222 @@ class BSSN(Equations):
         d_chi = g.D1.grad(chi)
         d_g_tt = g.D1.grad(g_tt)
 
-        # Calculate the null-ray expansion.
-        rTheta = np.zeros_like(chi)
-        for i in range(N):
-            A_tt = -A_rr[i] * g_tt[i] / (2.0 * g_rr[i])
-            d_phi = -d_chi[i] / (4.0 * chi[i])
-            e2p = 1.0 / np.sqrt(chi[i])
-            Kbar_tt = A_tt + g_tt[i] * K[i] / 3.0
-            rTheta[i] = np.abs(r[i]) * (
-                (4.0 * g_tt[i] * d_phi + d_g_tt[i]) / (e2p * g_tt[i] * np.sqrt(g_rr[i]))
-                - 2.0 * Kbar_tt / g_tt[i]
-            )
+        # Finite negative metric samples admit a diagnostic continuation.
+        rTheta = np.full_like(chi, np.nan)
+        usable = (np.isfinite(chi) & (chi != 0.0) & np.isfinite(g_rr)
+                  & (g_rr != 0.0) & np.isfinite(g_tt) & (g_tt != 0.0))
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            for i in np.flatnonzero(usable):
+                A_tt = -A_rr[i] * g_tt[i] / (2.0 * g_rr[i])
+                d_phi = -d_chi[i] / (4.0 * chi[i])
+                e2p = 1.0 / np.sqrt(abs(chi[i]))
+                Kbar_tt = A_tt + g_tt[i] * K[i] / 3.0
+                rTheta[i] = np.abs(r[i]) * (
+                    (4.0 * g_tt[i] * d_phi + d_g_tt[i]) / (e2p * g_tt[i] * np.sqrt(abs(g_rr[i])))
+                    - 2.0 * Kbar_tt / g_tt[i]
+                )
 
-        # Find location of the horizon--march from the outside.
-        rin = 0.25 * r0
-        rout = 4.0 * r0
-        rh = find_ah_zero(rTheta, r, rin, rout)
-        if rh != None:
-            gtt_h = linear_interpolation(g_tt, r, rh)
-            chi_h = linear_interpolation(chi, r, rh)
-            area_h = 4.0 * np.pi * gtt_h / chi_h
-            mass_h = np.sqrt(area_h / (16.0 * np.pi))
+        first = max(g.nghost, np.searchsorted(r, 0.0, side="right"))
+        stop = len(r) - g.nghost
+        if first < stop:
+            bounds = (max(0.25 * r0, r[first]), min(4.0 * r0, r[stop - 1]))
+            searches = [bounds]
+            active = (r[first], r[stop - 1])
+            if recover and bounds != active:
+                searches.append(active)
+            for attempt, (rin, rout) in enumerate(searches):
+                if rin > rout:
+                    continue
+                result = _search_horizon(r, rTheta, g_rr, g_tt, chi, rin, rout,
+                                         first, stop, interpolation)
+                if result is not None:
+                    rh, mass, self.horizon_interpolation_used = result
+                    if attempt:
+                        print("Horizon warning: recovered outside tracking window.")
+                    return rh, mass, rTheta
+        return None, None, rTheta
+
+
+def _search_horizon(r, theta, radial, angular, chi, rin, rout, first, stop, interpolation):
+    candidate_stop = stop
+    cubic = interpolation == "cubic"
+    while first < candidate_stop:
+        rh, left = _find_ah_bracket(theta, r, rin, rout, first, candidate_stop, cubic)
+        if rh is None:
+            return None
+        if left == -1:
+            node = np.searchsorted(r, rh)
+            samples = slice(node, node + 1)
+            gtt_h, chi_h = angular[node], chi[node]
+            candidate_stop = node
         else:
-            mass_h = None
+            samples = slice(left, left + 2)
+            with np.errstate(over="ignore", invalid="ignore"):
+                gtt_h = linear_interpolation(angular, r, rh)
+                chi_h = linear_interpolation(chi, r, rh)
+            candidate_stop = left + 1
 
-        return rh, mass_h, rTheta
+        linear_in_bounds = rin <= rh <= rout
+        mass, negative_area = _horizon_mass(gtt_h, chi_h) if linear_in_bounds else (None, False)
+        degree = 1
+        refine = cubic and left != -1
+        if refine and first < left and left + 2 < stop:
+            stencil = slice(left - 1, left + 3)
+            samples = stencil
+            result = _refine_horizon_cubic(
+                r[stencil], theta[stencil], angular[stencil], chi[stencil], rin, rout
+            )
+            if result is not None:
+                cubic_r, cubic_angular, cubic_chi = result
+                cubic_mass, cubic_negative_area = _horizon_mass(cubic_angular, cubic_chi)
+                clean = (
+                    (radial[stencil] > 0.0).all() and (angular[stencil] > 0.0).all()
+                    and (chi[stencil] > 0.0).all() and cubic_angular > 0.0 and cubic_chi > 0.0
+                )
+                if cubic_mass is not None and (clean or mass is None):
+                    if clean:
+                        return cubic_r, cubic_mass, (3, False)
+                    rh, gtt_h, chi_h = result
+                    mass, negative_area = cubic_mass, cubic_negative_area
+                    degree = 3
+
+        if degree == 1 and not linear_in_bounds:
+            continue
+        warnings = []
+        if (chi[samples] <= 0.0).any() or chi_h <= 0.0:
+            warnings.append("nonpositive chi")
+        if ((radial[samples] <= 0.0).any() or (angular[samples] <= 0.0).any()
+                or gtt_h <= 0.0):
+            warnings.append("nonpositive conformal metric")
+        fallback = refine and degree == 1
+        if fallback:
+            warnings.append("linear fallback")
+        if degree == 3:
+            warnings.append("linear area undefined" if linear_in_bounds else "linear root out of bounds")
+        if negative_area:
+            warnings.append("absolute area")
+        if mass is None:
+            warnings.append("undefined area at crossing")
+        if warnings:
+            print(f"Horizon warning at r={rh:g}: {', '.join(warnings)}.")
+        if mass is not None:
+            return rh, mass, (degree, fallback)
+    return None
+
+
+def _horizon_mass(angular, chi):
+    if not (np.isfinite(angular) and np.isfinite(chi)) or chi == 0.0:
+        return None, False
+    area = 4.0 * np.pi * float(angular) / float(chi)
+    if not np.isfinite(area):
+        area = (float(angular) / float(chi)) * (4.0 * np.pi)
+    if not np.isfinite(area):
+        return None, False
+    return np.sqrt(abs(area) / (16.0 * np.pi)), area < 0.0
+
+
+def _cubic_coefficients(nodes, values):
+    """Power coefficients in cell units, based at the left bracket node."""
+    a, b = nodes[0], nodes[3]
+    outer_left, left, right, outer_right = values
+    slope = right - left
+    left_slope = (left - outer_left) / -a
+    right_slope = (outer_right - right) / (b - 1.0)
+    second = (slope - left_slope) / (1.0 - a)
+    third = ((right_slope - slope) / b - second) / (b - a)
+    return left, slope - second + a * third, second - (1.0 + a) * third, third
+
+
+def _evaluate_cubic(coeff, z):
+    c0, c1, c2, c3 = coeff
+    return c0 + z * (c1 + z * (c2 + z * c3))
+
+
+def _refine_horizon_cubic(r, theta, angular, chi, rin, rout):
+    """Refine the selected cell and interpolate the angular and conformal fields."""
+    if not (np.isfinite(theta).all() and np.isfinite(angular).all()
+            and np.isfinite(chi).all()):
+        return None
+    dx = r[2] - r[1]
+    nodes = (r - r[1]) / dx
+    with np.errstate(over="ignore", invalid="ignore"):
+        coeff = _cubic_coefficients(nodes, theta)
+        _, c1, c2, c3 = coeff
+        # The derivative's three Bernstein coefficients must agree in sign.
+        # This sufficient condition certifies monotonicity throughout [0, 1].
+        direction = 1.0 if theta[2] > 0.0 else -1.0
+        derivative = direction * np.array([c1, c1 + c2, c1 + 2.0 * c2 + 3.0 * c3])
+        end = _evaluate_cubic(coeff, 1.0)
+        if not (np.isfinite(derivative).all() and (derivative > 0.0).all()
+                and np.isfinite(end) and direction * end > 0.0):
+            return None
+
+        lo, hi = 0.0, 1.0
+        for _ in range(48):
+            z = (lo + hi) / 2.0
+            value = _evaluate_cubic(coeff, z)
+            if not np.isfinite(value):
+                return None
+            if value == 0.0:
+                lo = hi = z
+                break
+            if direction * value < 0.0:
+                lo = z
+            else:
+                hi = z
+        z = (lo + hi) / 2.0
+        root = r[1] + dx * z
+        if not (r[1] <= root <= r[2] and rin <= root <= rout):
+            return None
+        return (root, _evaluate_cubic(_cubic_coefficients(nodes, angular), z),
+                _evaluate_cubic(_cubic_coefficients(nodes, chi), z))
+
+
+@njit
+def _find_ah_bracket(f, x, x1, x2, first, stop, include_clipped=False):
+    """Return the outermost eligible linear root and cell index (-1 for a node)."""
+    lo, hi = min(x1, x2), max(x1, x2)
+    if (len(x) == 0 or not np.isfinite(x1) or not np.isfinite(x2)
+            or lo < x[0] or hi > x[-1]):
+        print(f"...find_ah_zero: x1={x1} and x2={x2} are out of range.")
+        return None, -1
+
+    # Include both cells cut by the bounds, with both nodes inside the allowed
+    # grid. Traversal follows decreasing radius magnitude on a signed search.
+    node_lo = max(first, np.searchsorted(x, lo, side="right") - 1)
+    node_hi = min(stop - 1, np.searchsorted(x, hi))
+    outer_bound = x1 if abs(x1) > abs(x2) else x2
+    step = 1 if outer_bound == lo else -1
+    start, end = (node_lo, node_hi) if step == 1 else (node_hi, node_lo)
+    for k in range(start, end + step, step):
+        fk = f[k]
+        if fk == 0.0 and lo <= x[k] <= hi:
+            return x[k], -1
+        if k == end:
+            break
+        j = k + step
+        fj = f[j]
+        if (np.isfinite(fk) and np.isfinite(fj)
+                and ((fk < 0.0 < fj) or (fj < 0.0 < fk))):
+            # Keep legacy arithmetic for ordinary scales.
+            numerator = fk * (x[k] - x[j])
+            denominator = fk - fj
+            if numerator != 0.0 and np.isfinite(numerator) and np.isfinite(denominator):
+                root = x[k] - numerator / denominator
+            else:
+                scale = max(abs(fk), abs(fj))
+                fraction = (fk / scale) / (fk / scale - fj / scale)
+                root = x[k] - fraction * (x[k] - x[j])
+            if include_clipped or lo <= root <= hi:
+                return root, min(k, j)
+    return None, -1
 
 
 @njit
 def find_ah_zero(f: np.ndarray, x: np.ndarray, x1: float, x2: float):
-    """
-    Find zero of the function f, moving from the outer part of the grid.
-    This is written for finding the apparent horizon from the null-ray expansion.
-
-    Parameters:
-        f = function to find zero
-        x =  coordinate array
-        x1 = lower bound of root
-        x2 = upper bound of root
-
-    Note:  The routine returns "None" if:
-       (1) the bounds are not on the grid,
-       (2) no root of f is found
-    """
-
-    xmin = x[0]
-    xmax = x[-1]
-    if not (xmin <= x1 <= xmax) or not (xmin <= x2 <= xmax):
-        print(f"...find_ah_zero: x1={x1} and x2={x2} are out of range.")
-        return None
-
-    dx = x[1] - x[0]
-    k1 = int((x1 - xmin) / dx)
-    k2 = int((x2 - xmin) / dx)
-    if abs(x1) > abs(x2):
-        kout, kin = k1, k2
-        xout, xin = x1, x2
-    else:
-        kout, kin = k2, k1
-        xout, xin = x2, x1
-    if xout > xin:
-        for k in range(kout, kin, -1):
-            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
-                return x[k]
-            if f[k] * f[k - 1] < 0:
-                # Linear interpolation for zero crossing
-                xzero = x[k] - f[k] * (x[k] - x[k - 1]) / (f[k] - f[k - 1])
-                return xzero
-    else:
-        for k in range(kout, kin):
-            if f[k] == 0.0 and min(x1, x2) <= x[k] <= max(x1, x2):
-                return x[k]
-            if f[k] * f[k + 1] < 0:
-                # Linear interpolation for zero crossing
-                xzero = x[k] - f[k] * (x[k] - x[k + 1]) / (f[k] - f[k + 1])
-                return xzero
-    if f[kin] == 0.0 and min(x1, x2) <= x[kin] <= max(x1, x2):
-        return x[kin]
-    return None
+    """Find a nodal zero or linear crossing inside the requested bounds."""
+    root, _ = _find_ah_bracket(f, x, x1, x2, 0, len(x))
+    return root
 
 
 def extrapolate_func(u, order=4):

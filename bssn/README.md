@@ -194,6 +194,27 @@ parameter-file keys.  A lapse gauge that needs an extra evolved field sets
 |-----|---------|-------------|
 | `bssn_outer_bc` | `"Sommerfeld"` | Outer BC: `"Sommerfeld"` or `"Sponge"` |
 | `bhmask_outer_radius` | 75.0 | Outer radius of the region used for constraint norms |
+| `horizon_interpolation` | `"cubic"` | Set to `"linear"` to use linear interpolation explicitly |
+
+Set `horizon_interpolation = "linear"` at the top level of the parameter file
+to request the legacy interpolation. The solver seeds the search with the
+initial-data Schwarzschild radius and tracks the last detected radius. It
+searches the tracking window first, then retries across the positive active
+grid if needed. It selects the outermost usable crossing in each search.
+
+Cubic refinement uses the two bracket nodes and one neighbor on each side.
+It keeps the linear result if the stencil is incomplete, the cubic fails
+the monotonicity or bounds check, or its geometry is suspect and linear
+geometry is usable. Exact sampled zeros use their own nodal geometry.
+
+The finder logs warnings for linear fallback, recovery beyond the tracking
+window, and suspect geometry. Finite negative `chi` or `grr` enters expansion
+square roots through its absolute value. Other factors retain their signs.
+For a finite negative area estimate, the reported mass uses the absolute
+area. Zero area gives zero mass and still counts as a hit. These continuations
+give diagnostic estimates for suspect geometry. Nonfinite expansions and
+undefined areas can still make a crossing unusable, in which case the search
+continues. Horizon tracking affects diagnostic norms and readouts only.
 
 ### Constraint enforcement
 

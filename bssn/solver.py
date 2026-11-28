@@ -32,6 +32,12 @@ def main(parfile):
 
     # Verify parameters
     butil.verify_params(params)
+    horizon_options = {"recover": True}
+    if "horizon_interpolation" in params:
+        interpolation = params["horizon_interpolation"]
+        if interpolation not in ("linear", "cubic"):
+            raise ValueError('horizon_interpolation must be "linear" or "cubic"')
+        horizon_options["interpolation"] = interpolation
 
     # Set up grid
     level = params.get("level", 0)
@@ -110,15 +116,15 @@ def main(parfile):
     rk4 = RK4(eqs, g)
 
     eqs.cal_constraints(eqs.u, g)
-    rbh_guess = 0.7
-    rbh, mbh, rTheta = eqs.find_horizon(g, rbh_guess)
-    horizon_found = rbh is not None and np.isfinite(rbh) and rbh > 0.0
+    rbh_guess = params["Mass"] * (0.5 if params["initial_data"] == "Puncture" else 2.0)
+    rbh, mbh, rTheta = eqs.find_horizon(g, rbh_guess, **horizon_options)
+    horizon_found = horizon_result_valid(rbh, mbh)
     rbh, mbh, rbh_guess, mask_radius = update_horizon_tracking(
         rbh, mbh, rbh_guess, 0.0
     )
     eqs.set_ah(rbh, mbh)
-    bhpts = int(rbh * len(r) / (r[-1] - r[0]))
-    print(f"Horizon(s) found at {rbh:03f} with masses {mbh:03f} and bhpts={bhpts:d}")
+    if horizon_found:
+        report_horizon(g, rbh, mbh)
     rmask = params.get("bhmask_outer_radius", 75.0)
     bhmask = np.ones(Nr, dtype=int)
     butil.set_bhmask(bhmask, r, mask_radius, rmask)
@@ -173,16 +179,14 @@ def main(parfile):
         time += dt
         if i % print_interval == 0 or i % output_interval == 0:
             eqs.cal_constraints(eqs.u, g)
-            rbh, mbh, rTheta = eqs.find_horizon(g, rbh_guess)
-            horizon_found = rbh is not None and np.isfinite(rbh) and rbh > 0.0
+            rbh, mbh, rTheta = eqs.find_horizon(g, rbh_guess, **horizon_options)
+            horizon_found = horizon_result_valid(rbh, mbh)
             rbh, mbh, rbh_guess, mask_radius = update_horizon_tracking(
                 rbh, mbh, rbh_guess, mask_radius
             )
             eqs.set_ah(rbh, mbh)
-            bhpts = int(rbh * len(r) / (r[-1] - r[0]))
-            print(
-                f"Horizon(s) found at {rbh:.03f} with masses {mbh:03f} and pts (radius)={bhpts:d}."
-            )
+            if horizon_found:
+                report_horizon(g, rbh, mbh)
             butil.set_bhmask(bhmask, r, mask_radius, rmask)
         if i % print_interval == 0:
             hamnorm = l2norm_mask(eqs.C[0], dr, bhmask)
@@ -203,9 +207,20 @@ def main(parfile):
     confile.close()
 
 
+def horizon_result_valid(radius, mass):
+    return (radius is not None and np.isfinite(radius) and radius > 0.0
+            and mass is not None and np.isfinite(mass) and mass >= 0.0)
+
+
+def report_horizon(grid, radius, mass):
+    active = grid.xi[0][grid.nghost : len(grid.xi[0]) - grid.nghost]
+    bhpts = np.count_nonzero((active > 0.0) & (active < radius))
+    print(f"Horizon(s) found at {radius:.6f} with mass {mass:.6f} and bhpts={bhpts:d}")
+
+
 def update_horizon_tracking(radius, mass, previous_guess, previous_mask_radius):
     """Keep a valid search guess and explicitly retain the last valid mask."""
-    if radius is not None and np.isfinite(radius) and radius > 0.0:
+    if horizon_result_valid(radius, mass):
         return radius, mass, radius, radius
     print("Horizon not found; retaining search guess and last valid mask radius.")
     return 0.0, 0.0, previous_guess, previous_mask_radius
